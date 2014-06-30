@@ -6,4 +6,4 @@ This is my experiment working with NodeJS, Canvas and HTML5.  It is driven by a 
 
 ### Server Engine
 
-Click here. [./app.js]
+[app.js] - The server side engine.
