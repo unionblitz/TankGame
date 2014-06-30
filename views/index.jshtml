@@ -1,0 +1,28 @@
+﻿<!doctype html>
+<html>
+<head>
+    <title>Tank v1.01</title>
+    <link href="/css/game.css" rel="stylesheet" />
+    <link href='http://fonts.googleapis.com/css?family=Press+Start+2P' rel='stylesheet' type='text/css'>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.0.min.js"></script>
+
+</head>
+<body>
+
+    <div class="abs-middle drop-shadow" style="width: 1000px; height: 800px;">
+        <canvas width="1000" height="800" id="canvas"></canvas>
+    </div>
+
+    <script type="text/javascript" src="/js/globals.js"></script>
+    <script type="text/javascript" src="/js/helpers.js"></script>
+	<script type="text/javascript" src="/js/v2_missile.js"></script>
+	<script type="text/javascript" src="/js/v2_explosion.js"></script>
+    <script type="text/javascript" src="/js/tankgun.js"></script>
+    <script type="text/javascript" src="/js/tank.js"></script>
+    <script type="text/javascript" src="/js/loginKeyManager.js"></script>
+    <script type="text/javascript" src="/js/chooseTankManager.js"></script>
+    <script type="text/javascript" src="/js/clientengine.js"></script>
+</body>
+</html>

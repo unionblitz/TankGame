@@ -1,0 +1,1514 @@
+﻿<!doctype html>
+<html>
+<head>
+    <title>Tank v1.01</title>
+    <link href="/css/game.css" rel="stylesheet" />
+    <link href='http://fonts.googleapis.com/css?family=Press+Start+2P' rel='stylesheet' type='text/css'>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.0.min.js"></script>
+    <script type="text/javascript" src="/js/jquery.transit.min.js"></script>
+
+</head>
+<body>
+
+    <div class="abs-middle drop-shadow" style="width: 800px; height: 600px;">
+        <canvas width="800" height="600" id="canvas"></canvas>
+    </div>
+
+    <script type="text/javascript">
+
+        //#region globals
+        window.requestAnimationFrame = window.requestAnimationFrame
+            || window.mozRequestAnimationFrame
+            || window.webkitRequestAnimationFrame
+            || window.msRequestAnimationFrame;
+
+        var canvas = document.getElementById("canvas"),
+            ctx = canvas.getContext("2d"),
+            globalWidth = 800,
+            globalHeight = 600,
+            lastReqTime = null,
+            global_keystate = {},
+            global_debugging = true,
+            fps = null;
+
+        //#endregion
+
+        //#region helpers
+
+        Array.max = function (array) {
+            return Math.max.apply(Math, array);
+        };
+
+        Array.min = function (array) {
+            return Math.min.apply(Math, array);
+        };
+
+        Array.prototype.rand = function () {
+            return this[Math.floor(Math.random() * this.length)];
+        };
+
+
+        function Helpers() {
+        }
+
+        Helpers.IsUndefined = function (obj) {
+            return typeof obj === "undefined";
+        };
+
+        Helpers.Rand = function (min, max) {
+            return Math.floor(Math.random() * (max - min + 1) + min);
+        };
+
+
+        Helpers.DoPolygonsIntersect = function (a, b) {
+        	/// <summary>
+        	/// If you pass in two closed polygons, this should return true if they intersect.
+        	/// </summary>
+            /// <param name="a">an array of connected points [{x:, y:}, {x:, y:},...] that form a closed polygon</param>
+            /// <param name="b">an array of connected points [{x:, y:}, {x:, y:},...] that form a closed polygon</param>
+            var polygons = [a, b];
+            var minA, maxA, projected, i, i1, j, minB, maxB;
+
+            for (i = 0; i < polygons.length; i++) {
+
+                // for each polygon, look at each edge of the polygon, and determine if it separates
+                // the two shapes
+                var polygon = polygons[i];
+                for (i1 = 0; i1 < polygon.length; i1++) {
+
+                    // grab 2 vertices to create an edge
+                    var i2 = (i1 + 1) % polygon.length;
+                    var p1 = polygon[i1];
+                    var p2 = polygon[i2];
+
+                    // find the line perpendicular to this edge
+                    var normal = { x: p2.y - p1.y, y: p1.x - p2.x };
+
+                    minA = maxA = undefined;
+                    // for each vertex in the first shape, project it onto the line perpendicular to the edge
+                    // and keep track of the min and max of these values
+                    for (j = 0; j < a.length; j++) {
+                        projected = normal.x * a[j].x + normal.y * a[j].y;
+                        if (Helpers.IsUndefined(minA) || projected < minA) {
+                            minA = projected;
+                        }
+                        if (Helpers.IsUndefined(maxA) || projected > maxA) {
+                            maxA = projected;
+                        }
+                    }
+
+                    // for each vertex in the second shape, project it onto the line perpendicular to the edge
+                    // and keep track of the min and max of these values
+                    minB = maxB = undefined;
+                    for (j = 0; j < b.length; j++) {
+                        projected = normal.x * b[j].x + normal.y * b[j].y;
+                        if (Helpers.IsUndefined(minB) || projected < minB) {
+                            minB = projected;
+                        }
+                        if (Helpers.IsUndefined(maxB) || projected > maxB) {
+                            maxB = projected;
+                        }
+                    }
+
+                    // if there is no overlap between the projects, the edge we are looking at separates the two
+                    // polygons, and we know there is no overlap
+                    if (maxA < minB || maxB < minA) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        Helpers.getRotatedCoordsForRect = function (x1, y1, x2, y2, x3, y3, x4, y4, angle, pivotX, pivotY) {
+            var cosa = Math.cos(angle),
+                sina = Math.sin(angle),
+                w = x3 - x1,    // width of the rectangle
+                h = y3 - y1,    // height of the rectangle
+                w2 = w / 2,     // width/2
+                h2 = h / 2,     // height/2
+                Nw2 = -w2,    // negative w/2
+                Nh2 = -h2,    // negative h/2
+                xo = pivotX || (x1 + w2), // x-offset for center of rectangle
+                yo = pivotY || (y1 + h2); // y-offset for center of rectangle
+
+            /**
+                We rotate based on the classical rotation matrix:
+
+                  new_x = x * cos(angle) - y * sin(angle);
+                  new_y = x * sin(angle) + y * cos(angle);
+
+                This is relative to an origin of (0,0), so we
+                really need to do this:
+
+                  new_x = x' * cos(angle) - y' * sin(angle) + xo;
+                  new_y = x' * sin(angle) + y' * cos(angle) + yo;
+
+                where x' and y' are translations so that the
+                rectangle's center is on 0,0 -- xo and yo are
+                the values by which we need to translate back.    
+            **/
+
+            var nx1 = Nw2 * cosa - Nh2 * sina + xo,
+                ny1 = Nw2 * sina + Nh2 * cosa + yo,
+                nx2 = w2 * cosa - Nh2 * sina + xo,
+                ny2 = w2 * sina + Nh2 * cosa + yo,
+                nx3 = w2 * cosa - h2 * sina + xo,
+                ny3 = w2 * sina + h2 * cosa + yo,
+                nx4 = Nw2 * cosa - h2 * sina + xo,
+                ny4 = Nw2 * sina + h2 * cosa + yo;
+
+            return {
+                x1: nx1, y1: ny1,
+                x2: nx2, y2: ny2,
+                x3: nx3, y3: ny3,
+                x4: nx4, y4: ny4
+            };
+        };
+
+        Helpers.AngleDraw = function (img, canvasX, canvasY, spriteMapX, spriteMapY, width, height, angle, resizeWidth, resizeHeight) {
+            ctx.save();
+
+            var xCenter = canvasX + width / 2,
+                yCenter = canvasY + height / 2,
+                xTopLeft = -width / 2,
+                yTopLeft = -height / 2;
+
+            ctx.translate(xCenter, yCenter);
+            ctx.rotate(angle);
+
+            ctx.drawImage(img, spriteMapX, spriteMapY, width, height, xTopLeft, yTopLeft, resizeWidth ? resizeWidth : width, resizeHeight ? resizeHeight : height);
+
+            ctx.restore();
+        };
+
+        Helpers.GetRadians = function (degree) {
+            return degree * Math.PI / 180;
+        };
+
+        Helpers.GetDegreesFromRadians = function (radians) {
+            return (radians * 180) / Math.PI;
+        };
+
+        Helpers.DrawRect = function (x1, y1, x2, y2, x3, y3, x4, y4) {
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x3, y3);
+            ctx.lineTo(x4, y4);
+            ctx.lineTo(x1, y1);
+            ctx.stroke();
+        };
+
+        Helpers.GetPoint = function (pivotX, pivotY, upperLeftCornerX, upperLeftCornerY, newAngle) {
+                        
+                var x, y, dist, diffX, diffY, ca, na;
+
+                /// get distance from center to point
+                diffX = upperLeftCornerX - pivotX;
+                diffY = upperLeftCornerY - pivotY;
+                dist = Math.sqrt(diffX * diffX + diffY * diffY);
+
+                /// find angle from pivot to corner
+                ca = Math.atan2(diffY, diffX) * 180 / Math.PI;
+
+                /// get new angle based on old + current delta angle
+                na = ((ca + newAngle) % 360) * Math.PI / 180;
+
+                /// get new x and y and round it off to integer
+                x = (pivotX + dist * Math.cos(na) + 0.5) | 0;
+                y = (pivotY + dist * Math.sin(na) + 0.5) | 0;
+
+                //return { x: x, y: y, dist: dist };
+                return { x: x, y: y };
+            
+        };
+
+        //#endregion
+
+        //#region Explosion
+        function Explosion(x, y, angle, fromMissile) {
+
+            var self = this;
+
+            this.x = x,
+            this.y = y,
+            this.width = 0,
+            this.height = 0,
+            this.fromMissile = fromMissile,
+            this.speed = 2.5,
+            this.angle = -angle, //Helpers.GetRadians(angle),
+            this.src = "./img/explosion.png",
+            this.xPath = Math.cos(this.angle) * this.speed,
+            this.yPath = Math.sin(this.angle) * this.speed;
+
+            this.img = new Image();
+            this.img.src = this.src;
+            this.img.isLoaded = false;
+
+            this.ixSprite = 0;
+
+            this.sprites = [
+                { x: 3, y: 0, w: 127, h: 126 },
+                { x: 130, y: 0, w: 127, h: 126 },
+                { x: 257, y: 0, w: 127, h: 126 },
+                { x: 386, y: 0, w: 127, h: 126 },
+                { x: 513, y: 0, w: 127, h: 126 },
+                { x: 641, y: 0, w: 127, h: 126 },
+                { x: 770, y: 0, w: 127, h: 126 },
+                { x: 897, y: 0, w: 127, h: 126 },
+
+                { x: 3, y: 127, w: 127, h: 126 },
+                { x: 130, y: 127, w: 127, h: 126 },
+                { x: 257, y: 127, w: 127, h: 126 },
+                { x: 386, y: 127, w: 127, h: 126 },
+                { x: 513, y: 127, w: 127, h: 126 },
+                { x: 641, y: 127, w: 127, h: 126 },
+                { x: 770, y: 127, w: 127, h: 126 },
+                { x: 897, y: 127, w: 127, h: 126 },
+
+                { x: 3, y: 253, w: 127, h: 126 },
+                { x: 130, y: 253, w: 127, h: 126 },
+                { x: 257, y: 253, w: 127, h: 126 },
+                { x: 386, y: 253, w: 127, h: 126 },
+                { x: 513, y: 253, w: 127, h: 126 },
+                { x: 641, y: 253, w: 127, h: 126 },
+                { x: 770, y: 253, w: 127, h: 126 },
+                { x: 897, y: 253, w: 127, h: 126 },
+
+                { x: 3, y: 384, w: 127, h: 126 },
+                { x: 130, y: 384, w: 127, h: 126 },
+                { x: 257, y: 384, w: 127, h: 126 },
+                { x: 386, y: 384, w: 127, h: 126 },
+                { x: 513, y: 384, w: 127, h: 126 },
+                { x: 641, y: 384, w: 127, h: 126 },
+                { x: 770, y: 384, w: 127, h: 126 },
+                { x: 897, y: 384, w: 127, h: 126 },
+
+                { x: 3, y: 511, w: 127, h: 126 },
+                { x: 130, y: 511, w: 127, h: 126 },
+                { x: 257, y: 511, w: 127, h: 126 },
+                { x: 386, y: 511, w: 127, h: 126 },
+                { x: 513, y: 511, w: 127, h: 126 },
+                { x: 641, y: 511, w: 127, h: 126 },
+                { x: 770, y: 511, w: 127, h: 126 },
+                { x: 897, y: 511, w: 127, h: 126 }
+
+            ];
+            this.totalSprites = this.sprites;
+
+
+
+            this.img.onload = function () {
+                self.img.isLoaded = true;
+            };
+
+            this.remove = false;
+
+        }
+
+        Explosion.prototype.Update = function () {
+
+        };
+
+        Explosion.prototype.Draw = function () {
+
+            if (this.img.isLoaded && !this.remove) {
+
+                var sprite = this.sprites[this.ixSprite++];
+
+                this.width = sprite.w;
+                this.height = sprite.h;
+
+                Helpers.AngleDraw(this.img, this.x, this.y, sprite.x, sprite.y, sprite.w, sprite.h, this.angle);
+            }
+
+        };
+
+        Explosion.prototype.Queue = function () {
+
+            //this.x = this.xPath;
+            //this.y = this.yPath;
+
+            if (this.x + this.width > globalWidth) {
+                this.remove = true;
+            }
+            if (this.y + this.height > globalHeight) {
+                this.remove = true;
+            }
+            if (this.x < 0) {
+                this.remove = true;
+            }
+            if (this.y < 0) {
+                this.remove = true;
+            }
+
+            this.remove = this.ixSprite + 1 >= this.sprites.length;
+
+        };
+        //#endregion
+
+        //#region Tank Gun
+        function TankGun(fromTank) {
+            this.x = fromTank.x,
+            this.y = fromTank.y,
+            this.angle = fromTank.angle;
+
+            //console.log({ d: degree, n: orgVal });
+
+            //switch (degree) {
+            //    case 90: this.x += 20; break; // up
+            //    case -225: this.x += 30; break; // up left
+            //    case -180: this.y -= 15; break; // left
+            //    case -135: this.y -= 15; break; // down left
+            //    case -90: this.x += 2; break; // down left
+            //    case -45: this.x += 6; break; // down right
+            //    case 45: this.x += 16; break; // up right
+            //}
+
+
+
+            //if (orgVal == 180) { orgVal = 0; }
+            //else if (orgVal == 0) { orgVal = 180; }
+            //0, -45, 
+
+
+            var self = this;
+            this.id = new Date().getTime();
+            
+            this.width = 62,
+            this.height = 46,
+            this.fromTank = fromTank,
+            this.src = "./img/tank-" + fromTank.color + ".png",
+            this.xPath = Math.cos(this.angle) * this.speed,
+            this.yPath = Math.sin(this.angle) * this.speed;
+            
+            this.img = new Image();
+            this.img.src = this.src;
+            this.img.isLoaded = false;
+
+            this.gunSprite = { x: 439, y: 310, w: 40, h: 64 };
+
+            this.img.onload = function () {
+                self.img.isLoaded = true;
+            };
+
+            this.remove = false;
+
+        }
+
+        TankGun.prototype.Update = function () {
+
+        };
+
+        TankGun.prototype.Draw = function () {
+
+            if (this.img.isLoaded) {
+
+                
+                this.width = this.gunSprite.w;
+                this.height = this.gunSprite.h;
+
+                //Helpers.AngleDraw(this.img, this.x, this.y, this.gunSprite.x, this.gunSprite.y, this.gunSprite.w, this.gunSprite.h, this.angle);
+
+                // need to rotate the flame relative to the missile... not relative to the flame itself...
+                ctx.save();
+
+                var xCenter = this.x + this.fromTank.width / 2,
+                    yCenter = this.y + this.fromTank.height / 2,
+                    xTopLeft = -this.fromTank.width / 2,
+                    yTopLeft = -this.fromTank.height / 2;
+
+                ctx.translate(xCenter, yCenter);
+                ctx.rotate(this.angle);
+
+                ctx.drawImage(this.img, this.gunSprite.x, this.gunSprite.y, this.gunSprite.w, this.gunSprite.h, xTopLeft + this.gunSprite.w - 20, yTopLeft + 39, this.gunSprite.w, this.gunSprite.h);
+
+                ctx.restore();
+
+                //Missile.AngleDraw(this.img, this.x, this.y, flame.x, flame.y, flame.w, flame.h, this.angle);
+
+                //console.log({ x: this.x, y: this.y });
+            }
+
+        };
+
+        TankGun.prototype.Queue = function () {
+
+            //this.x += this.xPath;
+            //this.y += this.yPath;
+
+            //if (this.x + this.width > globalWidth) {
+            //    this.remove = true;
+            //}
+            //if (this.y + this.height > globalHeight) {
+            //    this.remove = true;
+            //}
+            //if (this.x < 0) {
+            //    this.remove = true;
+            //}
+            //if (this.y < 0) {
+            //    this.remove = true;
+            //}
+        };
+
+        //#endregion
+
+        //#region Missile
+        function Missile(fromTank) {
+
+            var x = fromTank.x,
+                y = fromTank.y,
+                angle = fromTank.angle;
+
+
+            // flip the missile 90 degrees...
+            var degree = -(fromTank.angle * 180 / Math.PI - 90);
+
+            angle = Helpers.GetRadians(degree);
+
+            var self = this;
+            this.id = new Date().getTime();
+            this.x = x,
+            this.y = y,
+            this.width = 62,
+            this.height = 46,
+            this.fromTank = fromTank,
+            this.speed = 4.5,
+            this.angle = angle, //Helpers.GetRadians(angle),
+            this.src = "./img/missile.png",
+            this.xPath = Math.cos(this.angle) * this.speed,
+            this.yPath = Math.sin(this.angle) * this.speed;
+
+            var dirX = "", dirY = "";
+            if (Math.floor(this.xPath) > 0) { dirX = "right"; }
+            if (Math.floor(this.xPath) < 0) { dirX = "left"; }
+            if (Math.floor(this.yPath) > 0) { dirY = "down "; }
+            if (Math.floor(this.yPath) < 0) { dirY = "up "; }
+            this.direction = dirY + dirX;
+
+            this.showFlame = false; // delay flame till out a certain distance away from turret
+
+            this.missileCoords = {
+                x1: null, y1: null,
+                x2: null, y2: null,
+                x3: null, y3: null,
+                x4: null, y4: null
+            };
+
+            this.img = new Image();
+            this.img.src = this.src;
+            this.img.isLoaded = false;
+
+            this.ixSprite = 0;
+
+            this.sprites = [
+                { x: 12, y: 6, w: 62, h: 46 },
+                { x: 90, y: 6, w: 62, h: 46 },
+                { x: 164, y: 6, w: 62, h: 46 },
+                { x: 242, y: 6, w: 62, h: 46 },
+                { x: 318, y: 6, w: 62, h: 46 },
+                { x: 395, y: 6, w: 62, h: 46 },
+                { x: 473, y: 6, w: 62, h: 46 },
+                { x: 12, y: 54, w: 62, h: 46 },
+                { x: 88, y: 54, w: 62, h: 46 },
+                { x: 164, y: 54, w: 62, h: 46 },
+                { x: 239, y: 55, w: 62, h: 46 },
+                { x: 316, y: 55, w: 62, h: 46 },
+                { x: 316, y: 55, w: 62, h: 46 },
+                { x: 395, y: 55, w: 62, h: 46 }
+            ];
+            this.totalSprites = this.sprites;
+
+            this.ixFlameSprite = 0;
+            this.flameSprites = [
+                { x: 171, y: 382, w: 23, h: 21 },
+                { x: 205, y: 382, w: 26, h: 21 },
+                { x: 243, y: 382, w: 28, h: 21 },
+                { x: 284, y: 382, w: 32, h: 21 },
+                { x: 243, y: 382, w: 28, h: 21 },
+                { x: 205, y: 382, w: 26, h: 21 }
+            ];
+
+            this.totalFlameSprites = this.flameSprites.length;
+
+            this.img.onload = function () {
+                self.img.isLoaded = true;
+            };
+
+            this.remove = false;
+
+        }
+
+        Missile.prototype.Update = function () {
+            var self = this;
+            if (!this.showFlame) {
+                setTimeout(function () {
+                    self.showFlame = true;
+                }, 100);
+            }
+        };
+
+        Missile.prototype.Draw = function () {
+
+            var self = this;
+
+            if (this.img.isLoaded) {
+
+                var sprite = this.sprites[this.ixSprite];
+                this.ixSprite = (this.ixSprite + 1 >= this.sprites.length) ? 0 : this.ixSprite + 1;
+
+                var resizeWidth = 36,
+                    resizeHeight = 27;
+
+                this.width = resizeWidth;
+                this.height = resizeHeight;
+
+
+                // need to rotate the missile relative to the tank... not relative to the missile itself...
+                ctx.save();
+
+                var xCenter = this.x + this.fromTank.width / 2,
+                    yCenter = this.y + this.fromTank.height / 2,
+                    xTopLeft = -resizeWidth / 2,
+                    yTopLeft = -resizeHeight / 2;
+
+                ctx.translate(xCenter, yCenter);
+                ctx.rotate(this.angle);
+
+                var newX = xTopLeft - sprite.w + 80,
+                    newY = yTopLeft + 8;
+
+                ctx.drawImage(this.img, sprite.x, sprite.y, sprite.w, sprite.h, newX, newY, resizeWidth, resizeHeight);
+
+                ctx.restore();
+                                
+                // we need to rotate the angle for some reason to get this to work correctly:
+                var newDeg = Helpers.GetDegreesFromRadians(this.angle) + 90,
+                    newRad = Helpers.GetRadians(newDeg);
+
+                var tankCorners = this.fromTank.GetXYCorners();
+
+                var x1Missile = this.fromTank.x + (this.fromTank.width + resizeWidth) / 2,
+                    y1Missile = this.fromTank.y + (this.fromTank.height + resizeHeight) / 2,
+                    x2Missile = x1Missile + resizeHeight,
+                    y2Missile = y1Missile,
+                    x3Missile = x1Missile + resizeHeight,
+                    y3Missile = y1Missile + resizeWidth,
+                    x4Missile = x1Missile,
+                    y4Missile = y1Missile + resizeWidth;
+
+                var newMissileCoords = Helpers.getRotatedCoordsForRect(
+                        x1Missile, y1Missile,
+                        x2Missile, y2Missile,
+                        x3Missile, y3Missile,
+                        x4Missile, y4Missile,
+                        newRad,
+                        tankCorners.xPivot, tankCorners.yPivot);
+
+                if (this.missileCoords.x1 == null) {
+                    this.missileCoords = newMissileCoords;
+                } else {
+
+                                        
+
+                    //console.log({ xPath: this.xPath, yPath: this.yPath });
+                    this.missileCoords.x1 += this.xPath;
+                    this.missileCoords.x2 += this.xPath;
+                    this.missileCoords.x3 += this.xPath;
+                    this.missileCoords.x4 += this.xPath;
+                    this.missileCoords.y1 += this.yPath;
+                    this.missileCoords.y2 += this.yPath;
+                    this.missileCoords.y3 += this.yPath;
+                    this.missileCoords.y4 += this.yPath;
+                }
+
+
+                // missile rectangle
+                if (global_debugging) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = "yellow";
+
+                    var xyCorners = this.GetXYCorners();
+
+                    Helpers.DrawRect(
+                        xyCorners.x1, xyCorners.y1,
+                        xyCorners.x2, xyCorners.y2,
+                        xyCorners.x3, xyCorners.y3,
+                        xyCorners.x4, xyCorners.y4);
+
+                    ctx.stroke();
+                    ctx.closePath();
+                }
+
+
+
+
+                //ctx.beginPath();
+                //var actualWidth = resizeHeight / 2;
+                //var actualHeight = resizeWidth;
+                //ctx.rect(newX, newY, resizeHeight, resizeWidth);
+                //ctx.stroke();
+                //ctx.closePath();
+
+                //Helpers.AngleDraw(this.img, this.x, this.y, sprite.x, sprite.y, sprite.w, sprite.h, this.angle, resizeWidth, resizeHeight);
+
+                if (this.showFlame) {
+
+                    var flame = this.flameSprites[this.ixFlameSprite];
+                    
+                    this.ixFlameSprite = (this.ixFlameSprite + 1 >= this.flameSprites.length) ? 0 : this.ixFlameSprite + 1;
+
+                    // need to rotate the flame relative to the missile... not relative to the flame itself...
+                    ctx.save();
+
+                    var xCenter = this.x + this.fromTank.width / 2,
+                        yCenter = this.y + this.fromTank.height / 2,
+                        xTopLeft = -resizeWidth / 2,
+                        yTopLeft = -resizeHeight / 2;
+
+                    ctx.translate(xCenter, yCenter);
+                    ctx.rotate(this.angle);
+
+                    ctx.drawImage(this.img, flame.x, flame.y, flame.w, flame.h, xTopLeft - flame.w + 20, yTopLeft + 8, flame.w, flame.h);
+
+                    ctx.restore();
+                }
+
+                //Missile.AngleDraw(this.img, this.x, this.y, flame.x, flame.y, flame.w, flame.h, this.angle);
+
+                //console.log({ x: this.x, y: this.y });
+            }
+
+        };
+
+        Missile.prototype.GetXYCorners = function () {
+            var tempX = 20, tempY = 5,
+                xOffset = tempX * Math.cos(this.angle) - tempY * Math.sin(this.angle),
+                yOffset = tempX * Math.sin(this.angle) + tempY * Math.cos(this.angle);
+
+            return {
+                x1: this.missileCoords.x1 + xOffset, y1: this.missileCoords.y1 + yOffset,
+                x2: this.missileCoords.x2 + xOffset, y2: this.missileCoords.y2 + yOffset,
+                x3: this.missileCoords.x3 + xOffset, y3: this.missileCoords.y3 + yOffset,
+                x4: this.missileCoords.x4 + xOffset, y4: this.missileCoords.y4 + yOffset
+            };
+        };
+
+        Missile.prototype.Queue = function (tankCollection) {
+
+            var queueResult = {
+                hitTank: null,
+                hit: {
+                    horizontal: null,
+                    vertical: null
+                }
+            };
+
+            this.x += this.xPath;
+            this.y += this.yPath;
+
+            if (this.x + this.height + 45 > globalWidth) {
+                this.remove = true;
+            }
+            if (this.y + this.width + 45 > globalHeight) {
+                this.remove = true;
+            }
+            if (this.x - this.height + 32 < 0) {
+                this.remove = true;
+            }
+            if (this.y - this.width + 65 < 0) {
+                this.remove = true;
+            }
+
+            var self = this;
+            var firstPolygonsCoords = this.GetPolygonCoords();
+
+            var minX = 0, minY = 0, maxX = 0, maxY = 0, midX = 0, midY = 0;
+            firstPolygonsCoords.forEach(function (obj, ix, arr) {
+                if (obj.x < minX || minX == 0) { minX = obj.x; }
+                if (obj.x > maxX || maxX == 0) { maxX = obj.x; }
+                if (obj.y < minY || minY == 0) { minY = obj.y; }
+                if (obj.y > maxY || maxY == 0) { maxY = obj.y; }
+            });
+
+            midX = (minX + maxX) / 2;
+            midY = (minY + maxY) / 2;
+
+            var hSpot = "",
+                vSpot = self.direction.indexOf("up") > -1 ? "down" : "up";
+
+            if (self.direction.indexOf("right") > -1 || self.direction.indexOf("left") > -1) {
+                hSpot = self.direction.indexOf("right") > -1 ? "left" : "right";
+            }
+
+            if (self.direction.indexOf("up") > -1 || self.direction.indexOf("down") > -1) {
+                vSpot = self.direction.indexOf("up") > -1 ? "down" : "up";
+            }
+
+
+            tankCollection.forEach(function (obj, ix, arr) {
+                
+                if (obj != self.fromTank && !obj.isExploded) {
+                    
+                    secondPolygonCoords = obj.GetPolygonCoords();
+                    
+                    var minXTank = 0, minYTank = 0,
+                        maxXTank = 0, maxYTank = 0,
+                        midXTank = 0, midYTank = 0;
+
+                    //console.log({
+                    //    midX: midX, midXTank: midXTank,
+                    //    midY: midY, midYTank: midYTank,
+                    //    hit: vSpot
+                    //});
+                    
+
+                    if (Helpers.DoPolygonsIntersect(firstPolygonsCoords, secondPolygonCoords)) {
+                        queueResult.hitTank = obj;
+                        //console.log({
+                        //    tankAngle: Helpers.GetDegreesFromRadians(obj.angle),
+                        //    direction: self.direction
+                        //});
+
+                        var tempRotateToTop = Helpers.GetDegreesFromRadians(-obj.angle);
+
+                        secondPolygonCoords.forEach(function (objTank, ixTank, arrTank) {
+                            if (objTank.x < minXTank || minXTank == 0) { minXTank = objTank.x; }
+                            if (objTank.x > maxXTank || maxXTank == 0) { maxXTank = objTank.x; }
+                            if (objTank.y < minYTank || minYTank == 0) { minYTank = objTank.y; }
+                            if (objTank.y > maxYTank || maxYTank == 0) { maxYTank = objTank.y; }
+                        });
+
+                        midXTank = (minXTank + maxXTank) / 2;
+                        midYTank = (minYTank + maxYTank) / 2;
+
+                        var rotatedHitPoint = {
+                            xy1: Helpers.GetPoint(midXTank, midYTank, firstPolygonsCoords[0].x, firstPolygonsCoords[0].y, tempRotateToTop),
+                            xy2: Helpers.GetPoint(midXTank, midYTank, firstPolygonsCoords[1].x, firstPolygonsCoords[1].y, tempRotateToTop),
+                            xy3: Helpers.GetPoint(midXTank, midYTank, firstPolygonsCoords[2].x, firstPolygonsCoords[2].y, tempRotateToTop),
+                            xy4: Helpers.GetPoint(midXTank, midYTank, firstPolygonsCoords[3].x, firstPolygonsCoords[3].y, tempRotateToTop)
+                        };
+
+                        var minXRotated = rotatedHitPoint.xy1.x,
+                            maxXRotated = rotatedHitPoint.xy1.x,
+                            minYRotated = rotatedHitPoint.xy1.y,
+                            maxYRotated = rotatedHitPoint.xy1.y;
+                        
+                        if (minXRotated < rotatedHitPoint.xy2.x) { minXRotated = rotatedHitPoint.xy2.x; }
+                        if (minXRotated < rotatedHitPoint.xy3.x) { minXRotated = rotatedHitPoint.xy3.x; }
+                        if (minXRotated < rotatedHitPoint.xy4.x) { minXRotated = rotatedHitPoint.xy4.x; }
+                        if (maxXRotated > rotatedHitPoint.xy2.x) { maxXRotated = rotatedHitPoint.xy2.x; }
+                        if (maxXRotated > rotatedHitPoint.xy3.x) { maxXRotated = rotatedHitPoint.xy3.x; }
+                        if (maxXRotated > rotatedHitPoint.xy4.x) { maxXRotated = rotatedHitPoint.xy4.x; }
+                        if (minYRotated < rotatedHitPoint.xy2.y) { minYRotated = rotatedHitPoint.xy2.y; }
+                        if (minYRotated < rotatedHitPoint.xy3.y) { minYRotated = rotatedHitPoint.xy3.y; }
+                        if (minYRotated < rotatedHitPoint.xy4.y) { minYRotated = rotatedHitPoint.xy4.y; }
+                        if (maxYRotated > rotatedHitPoint.xy2.y) { maxYRotated = rotatedHitPoint.xy2.y; }
+                        if (maxYRotated > rotatedHitPoint.xy3.y) { maxYRotated = rotatedHitPoint.xy3.y; }
+                        if (maxYRotated > rotatedHitPoint.xy4.y) { maxYRotated = rotatedHitPoint.xy4.y; }
+
+                        var midXRotated = (minXRotated + maxXRotated) / 2,
+                            midYRotated = (minYRotated + maxYRotated) / 2;
+
+                        var hPoint = (midXRotated > midXTank) ? "right" : "left",
+                            vPoint = (midYRotated < midYTank) ? "up" : "down";
+
+                        queueResult.hit.horizontal = hPoint;
+                        queueResult.hit.vertical = vPoint;
+
+                        //console.log(vPoint + " " + hPoint);
+
+                       
+
+                        self.remove = true;
+                    }
+
+                }
+            });
+            
+            return queueResult;
+
+        };
+
+
+        Missile.prototype.GetPolygonCoords = function () {
+            var missileCorners = this.GetXYCorners();
+
+            // we need to rotate the angle for some reason to get this to work correctly:
+            var newDeg = Helpers.GetDegreesFromRadians(this.angle) + 90,
+                newRad = Helpers.GetRadians(newDeg);
+
+            var newCoords = Helpers.getRotatedCoordsForRect(
+                missileCorners.x1, missileCorners.y1,
+                missileCorners.x2, missileCorners.y2,
+                missileCorners.x3, missileCorners.y3,
+                missileCorners.x4, missileCorners.y4,
+                -this.angle);
+
+            return [
+                { x: newCoords.x1, y: newCoords.y1 },
+                { x: newCoords.x2, y: newCoords.y2 },
+                { x: newCoords.x3, y: newCoords.y3 },
+                { x: newCoords.x4, y: newCoords.y4 }
+            ];
+        };
+
+        //#endregion
+
+        //#region Tank
+        function Tank(x, y, color, angle, socketId, playerName) {
+
+            var self = this;
+            
+            this.x = x,
+            this.y = y,
+            this.width = 0,
+            this.height = 0,
+            this.speed = 2.5,
+            this.angle = Helpers.GetRadians(angle),
+            this.src = "./img/tank-" + color + ".png",
+            this.xPath = Math.cos(this.angle) * this.speed,
+            this.yPath = Math.sin(this.angle) * this.speed,
+            this.color = color;
+            this.damage = 0.0; // 0 = none; 0.5 = 50%; 1.0 = 100%
+            this.socketId = socketId;
+            this.playerName = playerName;
+
+            this.img = new Image();
+            this.img.src = this.src;
+            this.img.isLoaded = false;
+            this.isExploded = false;
+            this.ixSprite = 0;
+
+            this.sprites = [
+                { x: 9, y: 7, w: 84, h: 112 }
+            ];
+
+            this.totalSprites = this.sprites;
+
+            this.deadSprite = { x: 405, y: 10, w: 119, h: 126 };
+
+            this.hits = [
+                { x: 224, y: 10, w: 39, h: 32, show: false }, // upper left
+                { x: 308, y: 10, w: 31, h: 32, show: false }, // lower left
+                { x: 266, y: 10, w: 39, h: 32, show: false }, // upper right
+                { x: 343, y: 10, w: 31, h: 32, show: false } // lower right
+            ];
+
+
+            this.img.onload = function () {
+                self.img.isLoaded = true;
+            };
+
+            this.remove = false;
+            this.gun = new TankGun(this);
+
+        }
+
+        Tank.prototype.Update = function () {
+
+            var self = this;
+            var wasExploded = this.isExploded;
+            this.isExploded = (this.damage >= 1.0);
+
+            // if this tank just exploded, adjust the x/y to the size of the new dead sprite
+            if (!wasExploded && this.isExploded) {
+                this.x = this.x - 19;
+                this.y = this.y - 12;
+            }
+
+        };
+
+        Tank.prototype.GetXYCorners = function () {
+            return {
+                x1: this.x,                 y1: this.y,   // TOP LEFT CORNER
+                x2: this.x + this.width,    y2: this.y,   // TOP RIGHT CORNER
+                x3: this.x + this.width,    y3: this.y + this.height, // BOTTOM RIGHT CORNER
+                x4: this.x,                 y4: this.y + this.height,
+                xPivot: this.x + this.width / 2,
+                yPivot: this.y + this.height / 2
+                
+            }; 
+        };
+
+        Tank.prototype.GetPolygonCoords = function () {
+            var tankCorners = this.GetXYCorners();
+
+            // we need to rotate the angle for some reason to get this to work correctly:
+            var newDeg = Helpers.GetDegreesFromRadians(this.angle) + 90,
+                newRad = Helpers.GetRadians(newDeg);
+
+            var newTankCoords = Helpers.getRotatedCoordsForRect(
+                tankCorners.x1, tankCorners.y1,
+                tankCorners.x2, tankCorners.y2,
+                tankCorners.x3, tankCorners.y3,
+                tankCorners.x4, tankCorners.y4,
+                -this.angle);
+            
+            return [
+                { x: newTankCoords.x1, y: newTankCoords.y1 },
+                { x: newTankCoords.x2, y: newTankCoords.y2 },
+                { x: newTankCoords.x3, y: newTankCoords.y3 },
+                { x: newTankCoords.x4, y: newTankCoords.y4 }
+            ];
+        };
+
+        Tank.prototype.TakeDamage = function (hit) {
+            switch (hit.horizontal) {
+                case "left":
+                    switch (hit.vertical) {
+                        case "down": this.hits[1].show = true; break;
+                        case "up": this.hits[0].show = true; break;
+                    }
+                    break;
+                case "right":
+                    switch (hit.vertical) {
+                        case "down": this.hits[3].show = true; break;
+                        case "up": this.hits[2].show = true; break;
+                    }
+                    break;
+            }
+            
+            this.damage += 0.15;
+            if (this.damage > 1.0) { this.damage = 1.0; }
+        };
+
+        Tank.prototype.Draw = function () {
+
+            var self = this;
+
+            if (this.img.isLoaded && !this.remove) {
+
+                var sprite = null,
+                    canvasX = this.x,
+                    canvasY = this.y;
+
+                if (this.isExploded) {
+                    sprite = this.deadSprite;
+                } else {
+
+                    // loop back to beginning of sprite
+                    this.ixSprite = this.ixSprite >= this.sprites.length ? 0 : this.ixSprite;
+                    sprite = this.sprites[this.ixSprite++];
+                }
+
+                this.width = sprite.w;
+                this.height = sprite.h;
+
+                Helpers.AngleDraw(this.img, canvasX, canvasY, sprite.x, sprite.y, sprite.w, sprite.h, this.angle * -1);
+                
+                // text of tank name
+                if (!this.isExploded) {
+                    var playerName = Helpers.IsUndefined(this.playerName) || !this.playerName ? "Machine" : this.playerName;
+                    var priorLineWidth = ctx.lineWidth;
+                    ctx.beginPath();
+                    ctx.fillStyle = "rgba(255,125,20,0.85)";
+                    ctx.font = "bold 20px Arial";
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = "black";
+                    ctx.strokeText(playerName, this.x - 10, this.y - 25);
+                    ctx.fillText(playerName, this.x - 10, this.y - 25)
+                    ctx.closePath();
+                    ctx.lineWidth = priorLineWidth;
+                }
+
+                // the health bar
+                if (!this.isExploded) {
+                    ctx.beginPath();
+                    ctx.rect(this.x - 10, this.y - 20, (1 - this.damage) * 100, 7);
+                    ctx.fillStyle = "rgba(0,255,0,0.75)";
+                    ctx.fill();
+                    ctx.closePath();
+                    ctx.beginPath();
+                    ctx.rect(this.x - 10 + (1 - this.damage) * 100, this.y - 20, this.damage * 100, 7);
+                    ctx.fillStyle = "rgba(255,0,0,0.75)";
+                    ctx.fill();
+                    ctx.closePath();
+                }
+
+                if (!this.isExploded) {
+
+                    // show 
+                    this.hits.forEach(function (hit, ix, arr) {
+
+                        if (hit.show) {
+
+                            switch (ix) {
+
+                                case 0: // upper left
+
+                                    // need to rotate the damage sprite around to the tank... not relative to the damage sprite itself...
+                                    ctx.save();
+
+                                    var xCenter = self.x + sprite.w / 2,
+                                        yCenter = self.y + sprite.h / 2,
+                                        xTopLeft = -sprite.w / 2,
+                                        yTopLeft = -sprite.h / 2;
+
+                                    ctx.translate(xCenter, yCenter);
+                                    ctx.rotate(self.angle);
+
+                                    ctx.drawImage(self.img, hit.x, hit.y, hit.w, hit.h, xTopLeft, yTopLeft + 6, hit.w, hit.h);
+
+                                    ctx.restore();
+
+                                    break;
+
+                                case 1: // lower left
+
+                                    // need to rotate the damage sprite around to the tank... not relative to the damage sprite itself...
+                                    ctx.save();
+
+                                    var xCenter = self.x + sprite.w / 2,
+                                        yCenter = self.y + sprite.h / 2,
+                                        xTopLeft = -sprite.w / 2,
+                                        yTopLeft = -sprite.h / 2;
+
+                                    ctx.translate(xCenter, yCenter);
+                                    ctx.rotate(self.angle);
+
+                                    ctx.drawImage(self.img, hit.x, hit.y, hit.w, hit.h, xTopLeft + 1, yTopLeft + self.height - hit.h - 5, hit.w, hit.h);
+
+                                    ctx.restore();
+
+                                    break;
+
+                                case 2: // upper right
+                                    //debugger;
+
+                                    // need to rotate the damage sprite around to the tank... not relative to the damage sprite itself...
+                                    ctx.save();
+
+                                    var xCenter = self.x + sprite.w / 2,
+                                        yCenter = self.y + sprite.h / 2,
+                                        xTopLeft = -sprite.w / 2,
+                                        yTopLeft = -sprite.h / 2;
+
+                                    ctx.translate(xCenter, yCenter);
+                                    ctx.rotate(self.angle);
+
+                                    ctx.drawImage(self.img, hit.x, hit.y, hit.w, hit.h, xTopLeft + self.width - hit.w, yTopLeft + 6, hit.w, hit.h);
+
+                                    ctx.restore();
+                                    break;
+
+                                case 3: // lower right
+
+
+                                    // need to rotate the damage sprite around to the tank... not relative to the damage sprite itself...
+                                    ctx.save();
+
+                                    var xCenter = self.x + sprite.w / 2,
+                                        yCenter = self.y + sprite.h / 2,
+                                        xTopLeft = -sprite.w / 2,
+                                        yTopLeft = -sprite.h / 2;
+
+                                    ctx.translate(xCenter, yCenter);
+                                    ctx.rotate(self.angle);
+
+                                    ctx.drawImage(self.img, hit.x, hit.y, hit.w, hit.h, xTopLeft + self.width - hit.w, yTopLeft + self.height - hit.h - 5, hit.w, hit.h);
+
+                                    ctx.restore();
+                                    break;
+
+                                    break;
+
+                            }
+                        }
+                    });
+
+                }
+                // debug mode
+                if (global_debugging) {
+                    var tankCorners = this.GetXYCorners();
+
+                    // we need to rotate the angle for some reason to get this to work correctly:
+                    var newDeg = Helpers.GetDegreesFromRadians(this.angle) + 90,
+                        newRad = Helpers.GetRadians(newDeg);
+
+                    var newTankCoords = Helpers.getRotatedCoordsForRect(
+                        tankCorners.x1, tankCorners.y1,
+                        tankCorners.x2, tankCorners.y2,
+                        tankCorners.x3, tankCorners.y3,
+                        tankCorners.x4, tankCorners.y4,
+                        -this.angle);
+
+                    // tank rectangle:
+                    ctx.beginPath();
+                    ctx.strokeStyle = "red";
+                    Helpers.DrawRect(newTankCoords.x1, newTankCoords.y1, newTankCoords.x2, newTankCoords.y2, newTankCoords.x3, newTankCoords.y3, newTankCoords.x4, newTankCoords.y4);
+                    ctx.stroke();
+                    ctx.closePath();
+                }
+            }
+
+        };
+
+        Tank.prototype.Queue = function () {
+        };
+
+
+        //#endregion
+
+        //#region PlayerCreationScreen
+        function PlayerCreationScreen() {
+
+        }
+        //#endregion
+
+        //#region GameEngine
+        function GameEngine() {
+
+            var self = this;
+
+            this.imgBg = new Image();
+            this.imgBg.src = "./img/bg.png";
+            this.imgBg.isLoaded = false;
+            this.showFps = true;
+            this.timer_missiles = null;
+            this.imgBg.onload = function () {
+                self.imgBg.isLoaded = true;
+            };
+
+            this.tanks = [];
+
+            this.missiles = [];
+            this.explosions = [];
+
+            this.KEY_SPACE = 32,
+            this.KEY_UP = 87,
+            this.KEY_DOWN = 83,
+            this.KEY_LEFT = 65,
+            this.KEY_RIGHT = 68,
+            this.KEY_SHIFT = 16;
+
+            var xRange = { min: 100, max: 550 },
+                yRange = { min: 100, max: 400 };
+
+            this.clientTank = new Tank(Helpers.Rand(xRange.min, xRange.max), Helpers.Rand(yRange.min, yRange.max), "red", [0, -180].rand(), 343245345, "John Doe");
+
+            
+            
+            this.tanks.push(this.clientTank);
+            
+            this.tanks.push(new Tank(Helpers.Rand(xRange.min, xRange.max), Helpers.Rand(yRange.min, yRange.max), "blue", [0, -180].rand()));
+
+            $(document).keydown(function (ev) {
+                //console.log(ev.keyCode);
+                global_keystate[ev.keyCode || ev.which] = true;
+            }).keyup(function (ev) {
+                global_keystate[ev.keyCode || ev.which] = false;
+            });
+
+        }
+
+        GameEngine.prototype.Loop = function () {
+            this.Clear();
+            this.Update();
+            this.Draw();
+            this.Queue();
+
+            if (!lastReqTime) {
+                lastReqTime = new Date().getTime();
+                fps = 0;
+            }
+
+            var delta = (new Date().getTime() - lastReqTime) / 1000;
+            lastReqTime = new Date().getTime();
+            fps = 1 / delta;
+
+            if (this.showFps) {
+                ctx.font = "10px Georgia";
+                ctx.fillStyle = "#ff0";
+                ctx.fillText(parseInt(fps, 10) + "fps", globalWidth - 40, 12);
+                ctx.fillStyle = "#0f0";
+                ctx.fillText(parseInt(delta * 1000, 10) + "ms", globalWidth - 40, 27);
+            }
+
+        };
+
+        GameEngine.prototype.Clear = function () {
+            ctx.clearRect(0, 0, globalWidth, globalHeight);
+        };
+
+        GameEngine.prototype.Update = function () {
+
+            this.missiles.forEach(function (obj, ix, arr) {
+                obj.Update();
+            });
+
+            this.explosions.forEach(function (obj, ix, arr) {
+                obj.Update();
+            });
+
+            this.tanks.forEach(function (obj, ix, arr) {
+                obj.Update();
+            });
+
+            this.tanks.forEach(function (obj, ix, arr) {
+                obj.gun.Update();
+            });
+
+        };
+
+        GameEngine.prototype.Draw = function () {
+
+            ctx.beginPath();
+
+            if (this.imgBg.isLoaded) {
+                ctx.drawImage(this.imgBg, 0, 0);
+            } else {
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(0, 0, globalWidth, globalHeight);
+            }
+
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "#000";
+            ctx.rect(0, 0, globalWidth, globalHeight);
+            ctx.stroke();
+
+            // draw the "exploded"/dead tanks
+            this.tanks.forEach(function (obj, ix, arr) {
+                if (obj.isExploded) {
+                    obj.Draw();
+                }
+            });
+
+            this.tanks.forEach(function (obj, ix, arr) {
+                if (!obj.isExploded) {
+                    obj.Draw();
+                    obj.gun.Draw();
+                }
+            });
+
+            this.missiles.forEach(function (obj, ix, arr) {
+                obj.Draw();
+            });
+
+            this.explosions.forEach(function (obj, ix, arr) {
+                obj.Draw();
+            });
+
+
+        };
+
+        GameEngine.prototype.Queue = function () {
+
+            var self = this;
+
+            //if (this.tanks.length == 0) {
+            //    this.tanks.push(new Tank(200, 300, "red", 180));
+            //}
+
+
+            if (global_keystate[this.KEY_SPACE]) {
+
+                if (this.timer_missiles != null) {
+                    clearTimeout(this.timer_missiles);
+                }
+
+                this.timer_missiles = setTimeout(function () {
+
+                    self.tanks.forEach(function (obj, ix, arr) {
+                        if (obj.color == self.clientTank.color) {
+                            self.missiles.push(new Missile(obj));
+                        }
+                    });
+
+                }, 50);
+
+            }
+
+            var speed = global_keystate[this.KEY_SHIFT] ? 3 : 1;
+            
+            var newTankAngle = null, newTankX = null, newTankY;
+
+            if (global_keystate[this.KEY_LEFT] && global_keystate[this.KEY_UP]) { // up + left
+
+                newTankAngle = Helpers.GetRadians(-135);
+                newTankY = this.clientTank.y - speed;
+                newTankX = this.clientTank.x - speed;
+                
+            }
+            else if (global_keystate[this.KEY_LEFT] && global_keystate[this.KEY_DOWN]) { // down + left
+
+                newTankAngle = Helpers.GetRadians(-45);
+                newTankY = this.clientTank.y + speed;
+                newTankX = this.clientTank.x - speed;
+
+            } else if (global_keystate[this.KEY_RIGHT] && global_keystate[this.KEY_UP]) { // up + right
+
+                newTankAngle = Helpers.GetRadians(135);
+                newTankY = this.clientTank.y - speed;
+                newTankX = this.clientTank.x + speed;
+
+            } else if (global_keystate[this.KEY_RIGHT] && global_keystate[this.KEY_DOWN]) { // down + right
+
+                newTankAngle = Helpers.GetRadians(45);
+                newTankY = this.clientTank.y + speed;
+                newTankX = this.clientTank.x + speed;
+
+            }
+            else {
+
+                if (global_keystate[this.KEY_UP]) {
+
+                    newTankAngle = Helpers.GetRadians(180);
+                    newTankY = this.clientTank.y - speed;
+                    newTankX = this.clientTank.x;
+                    tankMoved = true;
+                }
+
+                if (global_keystate[this.KEY_DOWN]) {
+
+                    newTankAngle = Helpers.GetRadians(0);
+                    newTankY = this.clientTank.y + speed;
+                    newTankX = this.clientTank.x;
+                    tankMoved = true;
+
+                }
+
+                if (global_keystate[this.KEY_LEFT]) {
+
+                    newTankAngle = Helpers.GetRadians(-90);
+                    newTankY = this.clientTank.y;
+                    newTankX = this.clientTank.x - speed;
+                    tankMoved = true;
+
+                }
+
+                if (global_keystate[this.KEY_RIGHT]) {
+
+                    newTankAngle = Helpers.GetRadians(90);
+                    newTankY = this.clientTank.y;
+                    newTankX = this.clientTank.x + speed;
+                    tankMoved = true;
+
+                }
+            }
+            if (!isNaN(newTankAngle)) {
+
+                var priorTankVals = {
+                    angle: this.clientTank.angle,
+                    y: this.clientTank.y,
+                    x: this.clientTank.x,
+                    gunAngle: this.clientTank.gun.angle,
+                    gunY: this.clientTank.gun.y,
+                    gunX: this.clientTank.gun.x
+                };
+
+                if (newTankX < 0) { newTankX = this.clientTank.x; }
+                if (newTankY < 0) { newTankY = this.clientTank.y; }
+                if (newTankY + this.clientTank.height > globalHeight) { newTankY = globalHeight - this.clientTank.height; }
+                if (newTankX + this.clientTank.width > globalWidth) { newTankX = globalWidth - this.clientTank.width; }
+
+                // catch all scenario (i.e. a bug occurred)
+                if (newTankX < 0) { newTankX = 1; }
+                if (newTankY < 0) { newTankY = 1; }
+
+                if (newTankAngle != null) {
+
+                    this.clientTank.angle = newTankAngle;
+                    this.clientTank.y = newTankY;
+                    this.clientTank.x = newTankX;
+                    this.clientTank.gun.angle = -newTankAngle;
+                    this.clientTank.gun.y = newTankY;
+                    this.clientTank.gun.x = newTankX;
+                    var firstTankPolygonCoords = this.clientTank.GetPolygonCoords();
+
+                    gameEngine.tanks.forEach(function (obj, ix, arr) {
+                        if (obj != self.clientTank && !obj.isExploded && !isNaN(firstTankPolygonCoords[0].x)) {
+
+                            secondTankPolygonCoords = obj.GetPolygonCoords();
+
+
+                            if (Helpers.DoPolygonsIntersect(firstTankPolygonCoords, secondTankPolygonCoords)) {
+                                console.log(firstTankPolygonCoords[0].x);
+                                self.clientTank.angle = priorTankVals.angle;
+                                self.clientTank.y = priorTankVals.y;
+                                self.clientTank.x = priorTankVals.x;
+                                self.clientTank.gun.angle = priorTankVals.gunAngle;
+                                self.clientTank.gun.y = priorTankVals.gunY;
+                                self.clientTank.gun.x = priorTankVals.gunX;
+                            }
+                        }
+                    });
+
+
+                }
+
+            }
+
+
+            this.missiles.forEach(function (obj, ix, arr) {
+                var hitInfo = obj.Queue(self.tanks);
+                
+                // if remove, create explosion and remove missile
+                if (obj.remove) {
+
+                    if (hitInfo.hitTank) {
+                        hitInfo.hitTank.TakeDamage(hitInfo.hit);
+                    }
+                    var deg = Helpers.GetDegreesFromRadians(obj.angle);
+                    
+                    // 0 <---> -90 => right, top right, up
+                    // 225 <---> 180 => top left, left
+                    // 90 <---> 135 => bottom left, bottom
+                    // 45 <---> 0 => bottom right, right
+
+
+                    //#region x/y for explosion (we need to offset to compensate for the explosion sprite)
+                    var x = obj.width / 2 + obj.x - 50,
+                        y = obj.height / 2 + obj.y;
+
+                    if (x > globalWidth) { x = globalWidth - obj.width / 2; }
+                    if (x < 0) { x = obj.width / 2; }
+                    if (y > globalHeight) { y = globalHeight - obj.height / 2; }
+                    if (y < 0) { y = obj.height / 2; }
+
+                    switch (obj.direction.toUpperCase().trim()) {
+                        case "LEFT": x = obj.x - 127 / 2 + 20; y = obj.y - 11; break;
+                        case "UP LEFT": x = obj.x - 127 / 2 + 20; y = obj.y - 33; break;
+                        case "UP": x = obj.x - 127 / 2 + 48; y = obj.y - 33; break;
+                        case "UP RIGHT": x = obj.x - 127 / 2 + 62; y = obj.y - 33; break;
+                        case "RIGHT": x = obj.x - 127 / 2 + 55; y = obj.y - 5; break;
+                        case "DOWN RIGHT": x = obj.x - 127 / 2 + 48; y = obj.y + 3; break;
+                        case "DOWN": x = obj.x - 127 / 2 + 38; y = obj.y + 3; break;
+                        case "DOWN LEFT": x = obj.x - 127 / 2 + 38; y = obj.y + 3; break;
+                    }
+                    
+                    if (y < 0) y = -60;
+                    
+                    self.explosions.push(new Explosion(x, y, obj.angle, obj.id));
+                    //#endregion
+
+                    self.missiles.splice(ix, 1);
+                }
+            });
+
+            this.tanks.forEach(function (obj, ix, arr) {
+                obj.gun.Queue();
+            });
+
+
+            this.explosions.forEach(function (obj, ix, arr) {
+                obj.Queue();
+                if (obj.remove) { self.explosions.splice(ix, 1); }
+            });
+
+            window.requestAnimationFrame(function () {
+                self.Loop()
+            });
+        };
+
+        gameEngine = new GameEngine();
+        gameEngine.Loop();
+
+        //#endregion
+
+    </script>
+
+</body>
+</html>

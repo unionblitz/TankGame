@@ -1,0 +1,18 @@
+{
+  "name": "Shooter",
+  "version": "0.0.0",
+  "description": "Shooter",
+  "main": "app.js",
+  "author": {
+    "name": "ssaltzman",
+    "email": ""
+  },
+  "dependencies": {
+    "express": "3.4.4",
+    "jade": "*",
+    "stylus": "*",
+	"jshtml-express": "*",
+	"socket.io": "*",
+	"extend": "*"
+  }
+}

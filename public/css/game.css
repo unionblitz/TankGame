@@ -1,0 +1,323 @@
+﻿html, body
+{
+    margin: 0;
+    padding: 0;
+    min-height:100%;
+    height: auto !important;
+    height: 100%;
+}
+
+body{
+    background: #AAA url('../img/main_bg.jpg') no-repeat center;
+    background-size: cover;
+
+}
+
+.wrapper
+{
+    width: 1000px;
+    margin: 0 auto;
+}
+
+.abs-middle
+{
+    position: absolute;
+    top: 50%;
+    margin-top: -400px;
+    margin-left: -500px;
+    left: 50%;
+}
+.drop-shadow{
+    box-shadow: 0px 0px 110px rgba(0,0,0,0.85);
+}
+.arena
+{
+    margin: 30px auto;
+    width: 800px;
+    height: 600px;
+    border: 1px solid black;
+    background-color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.turret
+{
+    background-color: blue;
+    border: 1px solid black;
+    border-radius: 10px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50px;
+    height: 50px;
+    z-index: 10;
+}
+
+.turret-gun
+{
+    z-index: 10;
+}
+
+.turret.t-red .turret-gun
+{
+    width: 100px;
+    height: 20px;
+    border: 1px solid blue;
+    background-color: #6c0505;
+    top: 15px;
+    left: 25px;
+    position: absolute;
+    -webkit-transform-origin: 0% 50%;
+    -moz-transform-origin: 0% 50%;
+    -ms-transform-origin: 0% 50%;
+    -o-transform-origin: 0% 50%;
+    transform-origin: 0% 50%;
+    -moz-transform: rotate(0deg);
+    -ms-transform: rotate(0deg);
+    -o-transform: rotate(0deg);
+    -webkit-transform: rotate(0deg);
+    transform: rotate(0deg);
+}
+
+.t-red
+{
+    background-color: #f00;
+}
+
+.t-blue
+{
+    background-color: #00f;
+}
+
+.t-green
+{
+    background-color: #00ff00;
+}
+
+.t-yellow
+{
+    background-color: #ff0;
+}
+
+.turret.t-top .turret-gun
+{
+    width: 100px;
+    height: 20px;
+    border: 1px solid blue;
+    background-color: #6c0505;
+    top: 15px;
+    left: 25px;
+    position: absolute;
+    -webkit-transform-origin: 0% 50%;
+    -moz-transform-origin: 0% 50%;
+    -ms-transform-origin: 0% 50%;
+    -o-transform-origin: 0% 50%;
+    transform-origin: 0% 50%;
+    -moz-transform: rotate(0deg);
+    -ms-transform: rotate(0deg);
+    -o-transform: rotate(0deg);
+    -webkit-transform: rotate(0deg);
+    transform: rotate(0deg);
+}
+
+
+
+.missile
+{
+    height: 15px;
+    width: 15px;
+    background-color: red;
+    border-radius: 100px;
+    border: 1px solid #A00;
+    position: absolute;
+    z-index: 1;
+}
+
+.arena .player-select-screen
+{
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #232323;
+}
+
+    .arena .player-select-screen section
+    {
+        height: 600px;
+        width: 600px;
+        margin: 0 auto;
+        overflow: hidden;
+    }
+
+        .arena .player-select-screen section a.pieceLink
+        {
+            display: inline-block;
+            width: 150px;
+            height: 410px;
+            margin-top: 190px;
+        }
+
+            .arena .player-select-screen section a.pieceLink:hover
+            {
+                background-color: #333;
+            }
+
+        .arena .player-select-screen section div.piece
+        {
+            position: relative;
+            display: inline-block;
+            background-color: blue;
+            width: 100px;
+            height: 100px;
+            margin-top: 170px;
+            margin-left: 21px;
+            border-radius: 10px;
+            border: 2px solid #777;
+            z-index: 100;
+        }
+
+
+        .arena .player-select-screen section a.pieceLink div.disabled
+        {
+            background-color: #AAA;
+        }
+
+            .arena .player-select-screen section a.pieceLink div.disabled b
+            {
+                background-color: #555;
+            }
+
+        .arena .player-select-screen section div.piece-red
+        {
+            background-color: red;
+        }
+
+        .arena .player-select-screen section div.piece-green
+        {
+            background-color: green;
+        }
+
+        .arena .player-select-screen section div.piece-blue
+        {
+            background-color: blue;
+        }
+
+        .arena .player-select-screen section div.piece-yellow
+        {
+            background-color: yellow;
+        }
+
+        .arena .player-select-screen section div.piece span
+        {
+            bottom: -40px;
+            color: #FFFFFF;
+            display: block;
+            font: 400 15px/15px "Press Start 2P",Arial;
+            height: 15px;
+            overflow: hidden;
+            padding: 10px 0;
+            position: absolute;
+            text-align: center;
+            text-transform: uppercase;
+            width: 100px;
+            z-index: 100;
+        }
+
+        .arena .player-select-screen section div.piece b
+        {
+            display: block;
+            position: absolute;
+            height: 100px;
+            width: 20px;
+            background-color: #6c0505;
+            left: 50%;
+            margin-left: -10px;
+            margin-top: -50px;
+            border: 1px solid #AAA;
+            border-radius: 3px 3px 0 0;
+            z-index: 10;
+        }
+
+        .arena .player-select-screen section div.piece i
+        {
+            display: block;
+            position: absolute;
+            height: 50px;
+            width: 50px;
+            background-color: #333;
+            left: 50%;
+            top: 50%;
+            margin-left: -25px;
+            margin-top: -33px;
+            border: 1px solid #AAA;
+            border-radius: 10px;
+            z-index: 5;
+        }
+
+.arena .player-select-screen-title
+{
+    position: absolute;
+    text-transform: uppercase;
+    font: 400 55px/55px "Press Start 2P", Arial;
+    color: white;
+    left: 50%;
+    width: 700px;
+    margin-left: -350px;
+    text-align: center;
+    margin-top: 50px;
+    border-bottom: 5px solid white;
+    padding-bottom: 25px;
+}
+
+.player-username-form
+{
+    position: absolute;
+    top: 300px;
+    left: 77px;
+}
+
+    .player-username-form input.txtUserName,
+    .player-username-form a
+    {
+        height: 70px;
+        line-height: 70px;
+        vertical-align: middle;
+        font: 400 35px/75px "Press Start 2P", Arial;
+        border: 1px solid #888;
+        text-align: center;
+    }
+
+    .player-username-form input.txtUserName
+    {
+        margin: 0;
+        padding: 0;
+        width: 300px;
+    }
+
+    .player-username-form a.btnPlay,
+    .player-username-form a.btnBack
+    {
+        background-color: #444;
+        display: inline-block;
+        color: white;
+        text-decoration: none;
+        margin: 0;
+        padding: 0 10px;
+        border-radius: 0 10px 10px 0;
+        width: 150px;
+    }
+
+    .player-username-form a.btnBack
+    {
+        border-radius: 10px 0 0 10px;
+    }
+
+    .player-username-form a.btnPlay
+    {
+        border-radius: 0 10px 10px 0;
+    }

@@ -1,0 +1,25 @@
+﻿<!doctype html>
+<html>
+<head>
+    <title>Tank v1.01</title>
+    <link href="/css/game.css" rel="stylesheet" />
+    <link href='http://fonts.googleapis.com/css?family=Press+Start+2P' rel='stylesheet' type='text/css'>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.0.min.js"></script>
+    <script type="text/javascript" src="/js/jquery.transit.min.js"></script>
+    <script src="/js/PlayerScreen.js"></script>
+    <script src="/js/Tank.js"></script>
+    <script src="/js/Missile.js"></script>
+    <script src="/js/ClientEngine.js"></script>
+    
+</head>
+<body>
+    
+    <div class="wrapper">
+        <div class="arena">
+        </div>
+    </div>
+
+</body>
+</html>
