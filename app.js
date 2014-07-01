@@ -238,8 +238,6 @@ io.sockets.on('connection', function (socket) {
 			}
 		});
 		
-		LoadPlayers();
-		
 	});
 	
 	// clients can request player info (with tank coords)
@@ -272,11 +270,28 @@ io.sockets.on('connection', function (socket) {
 //-------------------------------------------------------------------
 // RUN THROUGH THE GAME LOOP (UPDATE, DRAW, QUEUE... REPEAT)
 //-------------------------------------------------------------------
+var gameData = {
+	damage: [],
+	tanks: [],
+	update: {},
+	draw: { 
+		missiles: [], 
+		explosions: [] 
+	},
+	queue: { 
+		missiles: []
+	}
+};
+
+//-------------------------------------------------------------------
+// physics loop
+//-------------------------------------------------------------------
 setInterval(function(){
 	
 	// session data that gets passed back to clients
-	var gameData = {
+	gameData = {
 		damage: [],
+		tanks: [],
 		update: {},
 		draw: { 
 			missiles: [], 
@@ -316,12 +331,6 @@ setInterval(function(){
 			}
 			var deg = Helpers.GetDegreesFromRadians(objMissile.angle);
 				
-			// 0 <---> -90 => right, top right, up
-			// 225 <---> 180 => top left, left
-			// 90 <---> 135 => bottom left, bottom
-			// 45 <---> 0 => bottom right, right
-
-
 			//#region x/y for explosion (we need to offset to compensate for the explosion sprite)
 			var x = objMissile.width / 2 + objMissile.x - 50,
 				y = objMissile.height / 2 + objMissile.y;
@@ -355,8 +364,18 @@ setInterval(function(){
 		objExplosion.Queue();
 	});
 	
-	playersManager.GetActivePlayers().forEach(function(objPlayer, ix, arr){
+	var activePlayers = playersManager.GetActivePlayers();
+	var activePlayerTanks = [];
+	activePlayers.forEach(function(objPlayer, ix, arr){
 		var playerTank = objPlayer.tank;
+		activePlayerTanks.push({
+			x: playerTank.x,
+			y: playerTank.y,
+			color: playerTank.color,
+			angle: playerTank.angle,
+			socketId: objPlayer.socketId,
+			userName: objPlayer.userName,
+		});
 		gameData.damage.push({
 			socketId: objPlayer.socketId,
 			color: playerTank.color,
@@ -364,13 +383,21 @@ setInterval(function(){
 			hits: playerTank.hits
 		});
 	});
-	
-	
+		
+	gameData.tanks = activePlayerTanks;
+		
+}, 1 / 66);
+
+//-------------------------------------------------------------------
+// server update loop
+//-------------------------------------------------------------------
+setInterval(function(){
+			
 	io.sockets.emit("LoadDrawData", {
 		gameData: gameData
 	});
 
-}, 5);
+}, 1 / 22);
 
 //#endregion
 

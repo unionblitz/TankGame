@@ -20,6 +20,33 @@ function ClientEngine() {
 	this.socket.on("LoadDrawData", function(data){
 		if(self.clientTank != null){
 			
+			var newTankList = [];
+			
+			data.gameData.tanks.forEach(function(dataTank, arr, ix){
+				
+				if (dataTank.socketId == self.socketId){
+					$.extend(self.clientTank, dataTank);
+				}
+				
+				//Helpers.Log(player.socketId + ": " + player.tank.angle + "; " + player.tank.gun.angle);
+				
+				var theTank = new Tank(
+					dataTank.x, 
+					dataTank.y, 
+					dataTank.color,
+					dataTank.angle, 
+					dataTank.socketId, 
+					dataTank.userName
+				);
+				
+				theTank.gun.angle = -Helpers.GetRadians(dataTank.angle);
+				
+				newTankList.push(theTank);
+				
+			});
+		
+			self.tanks = newTankList;
+			
 			self.v2Missiles = [],
 			self.v2Explosions = [];
 			
