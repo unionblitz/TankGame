@@ -34,5 +34,15 @@ Key              | Action
 
 You will want to change the "socketUrl" in the [Globals.js](/public/js/globals.js) file to point to your IP address.
 
-You will also want to ensure that you have opened up the port (in this case, port 1337) for nodeJS.
+You will also want to ensure that you have opened up the port (in this case, port 1337) for nodeJS.  This may require a Firewall/DNS update.
 
+### Requirements
+If you look into the [package.json](package.json) file, you will see what Node Package Modules (NPM) are used.  Here is a list (it might not be as up to date as the package.json file):
+* Latest NodeJS
+* NodeJS Module: Socket.IO
+* NodeJS Module: Jade
+* NodeJS Module: Stylus
+* NodeJS Module: JSHtml-Express
+* NodeJS Module: Extend
+
+A web browser that supports Canvas (most/all popular and modern browsers do).
