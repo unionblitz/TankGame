@@ -40,6 +40,6 @@ var canvas = document.getElementById("canvas"),
 		}
 	},
     fps = null,
-    socketUrl = "http://192.168.123.53:1337";
+    socketUrl = window.location.origin;
 
 //#endregion

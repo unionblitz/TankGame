@@ -197,7 +197,7 @@ io.sockets.on('connection', function (socket) {
                 gunY: thePlayer.tank.gun.y,
                 gunX: thePlayer.tank.gun.x
             };
-		
+
 		var angle = data.angle,
 			y = data.y,
 			x = data.x,
